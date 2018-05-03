@@ -22,13 +22,13 @@ class DeepFM(BaseEstimator, TransformerMixin):
                  deep_layers_activation=tf.nn.relu,
                  epoch=10, batch_size=256,
                  learning_rate=0.001, optimizer_type="adam",
-                 batch_norm=0, batch_norm_decay=0.995,
+                 batch_norm=0, batch_norm_decay=0.995,#这两个是啥？
                  verbose=False, random_seed=2016,
                  use_fm=True, use_deep=True,
                  loss_type="logloss", eval_metric=roc_auc_score,
                  l2_reg=0.0, greater_is_better=True):
-        assert (use_fm or use_deep)
-        assert loss_type in ["logloss", "mse"], \
+        assert (use_fm or use_deep)#至少选一种
+        assert loss_type in ["logloss", "mse"], \#检查损失函数类型
             "loss_type can be either 'logloss' for classification task or 'mse' for regression task"
 
         self.feature_size = feature_size        # denote as M, size of the feature dictionary
@@ -41,7 +41,7 @@ class DeepFM(BaseEstimator, TransformerMixin):
         self.deep_layers_activation = deep_layers_activation
         self.use_fm = use_fm
         self.use_deep = use_deep
-        self.l2_reg = l2_reg
+        self.l2_reg = l2_reg#正则项系数？
 
         self.epoch = epoch
         self.batch_size = batch_size
@@ -58,30 +58,30 @@ class DeepFM(BaseEstimator, TransformerMixin):
         self.greater_is_better = greater_is_better
         self.train_result, self.valid_result = [], []
 
-        self._init_graph()
+        self._init_graph()#初始化网络？
 
 
     def _init_graph(self):
         self.graph = tf.Graph()
         with self.graph.as_default():
 
-            tf.set_random_seed(self.random_seed)
+            tf.set_random_seed(self.random_seed)#设置种子
 
             self.feat_index = tf.placeholder(tf.int32, shape=[None, None],
-                                                 name="feat_index")  # None * F
+                                                 name="feat_index")  # None * F , F,size of the feature fields
             self.feat_value = tf.placeholder(tf.float32, shape=[None, None],
                                                  name="feat_value")  # None * F
             self.label = tf.placeholder(tf.float32, shape=[None, 1], name="label")  # None * 1
-            self.dropout_keep_fm = tf.placeholder(tf.float32, shape=[None], name="dropout_keep_fm")
-            self.dropout_keep_deep = tf.placeholder(tf.float32, shape=[None], name="dropout_keep_deep")
-            self.train_phase = tf.placeholder(tf.bool, name="train_phase")
+            self.dropout_keep_fm = tf.placeholder(tf.float32, shape=[None], name="dropout_keep_fm")#fm的dropout
+            self.dropout_keep_deep = tf.placeholder(tf.float32, shape=[None], name="dropout_keep_deep")#dnn的dropout
+            self.train_phase = tf.placeholder(tf.bool, name="train_phase")#？？？
 
-            self.weights = self._initialize_weights()
+            self.weights = self._initialize_weights()#调用权重初始化
 
             # model
             self.embeddings = tf.nn.embedding_lookup(self.weights["feature_embeddings"],
-                                                             self.feat_index)  # None * F * K
-            feat_value = tf.reshape(self.feat_value, shape=[-1, self.field_size, 1])
+                                                             self.feat_index)  # None * F * K   K,size of the feature embedding
+            feat_value = tf.reshape(self.feat_value, shape=[-1, self.field_size, 1])#F  feature field size
             self.embeddings = tf.multiply(self.embeddings, feat_value)
 
             # ---------- first order term ----------
@@ -181,12 +181,12 @@ class DeepFM(BaseEstimator, TransformerMixin):
 
         # embeddings
         weights["feature_embeddings"] = tf.Variable(
-            tf.random_normal([self.feature_size, self.embedding_size], 0.0, 0.01),
+            tf.random_normal([self.feature_size, self.embedding_size], 0.0, 0.01),#将feature输入到embedding层
             name="feature_embeddings")  # feature_size * K
         weights["feature_bias"] = tf.Variable(
             tf.random_uniform([self.feature_size, 1], 0.0, 1.0), name="feature_bias")  # feature_size * 1
 
-        # deep layers
+        # deep layers   对dnn权重初始化
         num_layer = len(self.deep_layers)
         input_size = self.field_size * self.embedding_size
         glorot = np.sqrt(2.0 / (input_size + self.deep_layers[0]))
@@ -197,7 +197,7 @@ class DeepFM(BaseEstimator, TransformerMixin):
         for i in range(1, num_layer):
             glorot = np.sqrt(2.0 / (self.deep_layers[i-1] + self.deep_layers[i]))
             weights["layer_%d" % i] = tf.Variable(
-                np.random.normal(loc=0, scale=glorot, size=(self.deep_layers[i-1], self.deep_layers[i])),
+                np.random.normal(loc=0, scale=glorot, size=(self.deep_layers[i-1], self.deep_layers[i])),#loc=0, scale=glorot什么意思
                 dtype=np.float32)  # layers[i-1] * layers[i]
             weights["bias_%d" % i] = tf.Variable(
                 np.random.normal(loc=0, scale=glorot, size=(1, self.deep_layers[i])),
@@ -205,12 +205,12 @@ class DeepFM(BaseEstimator, TransformerMixin):
 
         # final concat projection layer
         if self.use_fm and self.use_deep:
-            input_size = self.field_size + self.embedding_size + self.deep_layers[-1]
+            input_size = self.field_size + self.embedding_size + self.deep_layers[-1]#最后一层
         elif self.use_fm:
             input_size = self.field_size + self.embedding_size
         elif self.use_deep:
             input_size = self.deep_layers[-1]
-        glorot = np.sqrt(2.0 / (input_size + 1))
+        glorot = np.sqrt(2.0 / (input_size + 1))#初始化的参数？？
         weights["concat_projection"] = tf.Variable(
                         np.random.normal(loc=0, scale=glorot, size=(input_size, 1)),
                         dtype=np.float32)  # layers[i-1]*layers[i]
