@@ -44,7 +44,7 @@ class FeatureDictionary(object):
                 #非连续值考虑one-hot后的情况，[0,1,2,0],us=3,tc=6,feat_dict[col]=((0,6)(1,7)(2,8))
                 self.feat_dict[col] = dict(zip(us, range(tc, len(us)+tc)))
                 tc += len(us)
-        self.feat_dim = tc
+        self.feat_dim = tc#处理后特征个数
 
 
 class DataParser(object):
@@ -73,7 +73,7 @@ class DataParser(object):
                 dfv.drop(col, axis=1, inplace=True)
                 continue
             if col in self.feat_dict.numeric_cols:
-                dfi[col] = self.feat_dict.feat_dict[col]
+                dfi[col] = self.feat_dict.feat_dict[col]#用dfi记录了index，但不该变dfv中原来的值
             else:
                 dfi[col] = dfi[col].map(self.feat_dict.feat_dict[col])#离散特征
                 dfv[col] = 1.
