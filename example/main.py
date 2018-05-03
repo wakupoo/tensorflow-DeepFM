@@ -18,42 +18,43 @@ from DeepFM import DeepFM
 gini_scorer = make_scorer(gini_norm, greater_is_better=True, needs_proba=True)
 
 
-def _load_data():
+def _load_data():#读取数据
 
-    dfTrain = pd.read_csv(config.TRAIN_FILE)
-    dfTest = pd.read_csv(config.TEST_FILE)
+    dfTrain = pd.read_csv(config.TRAIN_FILE)#训练集
+    dfTest = pd.read_csv(config.TEST_FILE)#测试集
 
     def preprocess(df):
         cols = [c for c in df.columns if c not in ["id", "target"]]
-        df["missing_feat"] = np.sum((df[cols] == -1).values, axis=1)
-        df["ps_car_13_x_ps_reg_03"] = df["ps_car_13"] * df["ps_reg_03"]
+        df["missing_feat"] = np.sum((df[cols] == -1).values, axis=1)#各样本的缺失值个数作为一列特征
+        df["ps_car_13_x_ps_reg_03"] = df["ps_car_13"] * df["ps_reg_03"]#？？为何相乘？？？？？？？？？
         return df
 
-    dfTrain = preprocess(dfTrain)
-    dfTest = preprocess(dfTest)
+    dfTrain = preprocess(dfTrain)#处理训练集
+    dfTest = preprocess(dfTest)#处理测试集
 
-    cols = [c for c in dfTrain.columns if c not in ["id", "target"]]
-    cols = [c for c in cols if (not c in config.IGNORE_COLS)]
+    cols = [c for c in dfTrain.columns if c not in ["id", "target"]]#第一次获得col
+    cols = [c for c in cols if (not c in config.IGNORE_COLS)]#过滤掉config中的col
 
     X_train = dfTrain[cols].values
     y_train = dfTrain["target"].values
     X_test = dfTest[cols].values
     ids_test = dfTest["id"].values
-    cat_features_indices = [i for i,c in enumerate(cols) if c in config.CATEGORICAL_COLS]
+    cat_features_indices = [i for i,c in enumerate(cols) if c in config.CATEGORICAL_COLS]#cat类特征的列index
 
     return dfTrain, dfTest, X_train, y_train, X_test, ids_test, cat_features_indices
 
 
 def _run_base_model_dfm(dfTrain, dfTest, folds, dfm_params):
-    fd = FeatureDictionary(dfTrain=dfTrain, dfTest=dfTest,
-                           numeric_cols=config.NUMERIC_COLS,
-                           ignore_cols=config.IGNORE_COLS)
-    data_parser = DataParser(feat_dict=fd)
-    Xi_train, Xv_train, y_train = data_parser.parse(df=dfTrain, has_label=True)
+    #获取dict
+    fd = FeatureDictionary(dfTrain=dfTrain, dfTest=dfTest,#训练集和测试集
+                           numeric_cols=config.NUMERIC_COLS,#num类列
+                           ignore_cols=config.IGNORE_COLS)#ignore特征，dfTrain和dfTest没有过滤掉
+    data_parser = DataParser(feat_dict=fd)#data_parser对象
+    Xi_train, Xv_train, y_train = data_parser.parse(df=dfTrain, has_label=True)调用parse方法获取处理后的数据
     Xi_test, Xv_test, ids_test = data_parser.parse(df=dfTest)
 
-    dfm_params["feature_size"] = fd.feat_dim
-    dfm_params["field_size"] = len(Xi_train[0])
+    dfm_params["feature_size"] = fd.feat_dim#处理之后的特征个数，即考虑了one-hot之后
+    dfm_params["field_size"] = len(Xi_train[0])#field个数
 
     y_train_meta = np.zeros((dfTrain.shape[0], 1), dtype=float)
     y_test_meta = np.zeros((dfTest.shape[0], 1), dtype=float)
@@ -61,28 +62,28 @@ def _run_base_model_dfm(dfTrain, dfTest, folds, dfm_params):
     gini_results_cv = np.zeros(len(folds), dtype=float)
     gini_results_epoch_train = np.zeros((len(folds), dfm_params["epoch"]), dtype=float)
     gini_results_epoch_valid = np.zeros((len(folds), dfm_params["epoch"]), dtype=float)
-    for i, (train_idx, valid_idx) in enumerate(folds):
+    for i, (train_idx, valid_idx) in enumerate(folds):#应该是划分k份
         Xi_train_, Xv_train_, y_train_ = _get(Xi_train, train_idx), _get(Xv_train, train_idx), _get(y_train, train_idx)
         Xi_valid_, Xv_valid_, y_valid_ = _get(Xi_train, valid_idx), _get(Xv_train, valid_idx), _get(y_train, valid_idx)
 
         dfm = DeepFM(**dfm_params)
         dfm.fit(Xi_train_, Xv_train_, y_train_, Xi_valid_, Xv_valid_, y_valid_)
 
-        y_train_meta[valid_idx,0] = dfm.predict(Xi_valid_, Xv_valid_)
-        y_test_meta[:,0] += dfm.predict(Xi_test, Xv_test)
+        y_train_meta[valid_idx,0] = dfm.predict(Xi_valid_, Xv_valid_)#k次折交
+        y_test_meta[:,0] += dfm.predict(Xi_test, Xv_test)#每次训练都预测一次，然后把预测结果累加取来
 
         gini_results_cv[i] = gini_norm(y_valid_, y_train_meta[valid_idx])
         gini_results_epoch_train[i] = dfm.train_result
         gini_results_epoch_valid[i] = dfm.valid_result
 
-    y_test_meta /= float(len(folds))
+    y_test_meta /= float(len(folds))#在测试集上的累加结果求平均
 
     # save result
-    if dfm_params["use_fm"] and dfm_params["use_deep"]:
+    if dfm_params["use_fm"] and dfm_params["use_deep"]:#deepFM
         clf_str = "DeepFM"
-    elif dfm_params["use_fm"]:
+    elif dfm_params["use_fm"]:#FM
         clf_str = "FM"
-    elif dfm_params["use_deep"]:
+    elif dfm_params["use_deep"]:#DNN
         clf_str = "DNN"
     print("%s: %.5f (%.5f)"%(clf_str, gini_results_cv.mean(), gini_results_cv.std()))
     filename = "%s_Mean%.5f_Std%.5f.csv"%(clf_str, gini_results_cv.mean(), gini_results_cv.std())
@@ -90,7 +91,7 @@ def _run_base_model_dfm(dfTrain, dfTest, folds, dfm_params):
 
     _plot_fig(gini_results_epoch_train, gini_results_epoch_valid, clf_str)
 
-    return y_train_meta, y_test_meta
+    return y_train_meta, y_test_meta#返回验证的预测和测试集的预测
 
 
 def _make_submission(ids, y_pred, filename="submission.csv"):
