@@ -28,7 +28,7 @@ class DeepFM(BaseEstimator, TransformerMixin):
                  loss_type="logloss", eval_metric=roc_auc_score,
                  l2_reg=0.0, greater_is_better=True):
         assert (use_fm or use_deep)#至少选一种
-        assert loss_type in ["logloss", "mse"], \#检查损失函数类型
+        assert loss_type in ["logloss", "mse"], \
             "loss_type can be either 'logloss' for classification task or 'mse' for regression task"
 
         self.feature_size = feature_size        # denote as M, size of the feature dictionary
